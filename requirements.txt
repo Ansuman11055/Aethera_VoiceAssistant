@@ -1,0 +1,15 @@
+speechrecognition
+pyttsx3
+requests
+beautifulsoup4
+wikipedia
+psutil
+pillow
+python-dotenv
+lxml
+pyaudio
+pycaw
+pywin32
+keyboard
+setuptools
+wheel
