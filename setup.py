@@ -62,7 +62,7 @@ def create_env_file():
             print("   Edit .env to add your API keys (optional)")
         else:
             with open(".env", "w") as f:
-                f.write("# Jarvis AI Assistant Environment Variables\n")
+                f.write("# Aethera AI Assistant Environment Variables\n")
                 f.write("# Add your API keys here (optional)\n\n")
                 f.write("OPENAI_API_KEY=\n")
                 f.write("WEATHER_API_KEY=\n")
@@ -96,7 +96,7 @@ def test_speakers():
     try:
         import pyttsx3
         engine = pyttsx3.init()
-        engine.say("Jarvis setup test successful")
+        engine.say("Aethera setup test successful")
         engine.runAndWait()
         print("✅ Text-to-speech test passed!")
         return True
@@ -106,7 +106,7 @@ def test_speakers():
         return False
 
 def main():
-    print("🤖 JARVIS AI ASSISTANT SETUP")
+    print("🤖 AETHERA AI ASSISTANT SETUP")
     print("=" * 40)
     
     success = True
@@ -136,11 +136,11 @@ def main():
     print("\n" + "=" * 40)
     if success:
         print("✅ Setup completed successfully!")
-        print("\n🚀 To start Jarvis, run:")
+        print("\n🚀 To start Aethera, run:")
         print("   python main.py")
-        print("\n💡 Try saying: 'Jarvis, what time is it?'")
-        print("               'Jarvis, search for Python tutorials'")
-        print("               'Jarvis, help'")
+        print("\n💡 Try saying: 'Aethera, what time is it?'")
+        print("               'Aethera, search for Python tutorials'")
+        print("               'Aethera, help'")
     else:
         print("❌ Setup encountered some issues.")
         print("   Please check the error messages above.")

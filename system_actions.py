@@ -208,11 +208,20 @@ class SystemController:
         try:
             spotify_running = any('spotify' in proc.name().lower() for proc in psutil.process_iter(['name']))
             
-            if not spotify_running and action != 'search_and_play':
+            if not spotify_running and action not in ['search_and_play', 'play']:
                 return {
                     'success': False,
                     'summary': "Spotify is not running. Please open Spotify first."
                 }
+            
+            # If Spotify is not running but action is 'play', try to start it
+            if not spotify_running and action == 'play':
+                try:
+                    subprocess.Popen(['start', 'spotify'], shell=True)
+                    time.sleep(2)  # Wait for Spotify to start
+                    return {'success': True, 'summary': "Starting Spotify."}
+                except:
+                    return {'success': False, 'summary': "Could not start Spotify. Please make sure it's installed."}
             
             try:
                 import win32api
@@ -221,7 +230,8 @@ class SystemController:
                 if action in ['play', 'pause']:
                     win32api.keybd_event(win32con.VK_MEDIA_PLAY_PAUSE, 0, 0, 0)
                     win32api.keybd_event(win32con.VK_MEDIA_PLAY_PAUSE, 0, win32con.KEYEVENTF_KEYUP, 0)
-                    return {'success': True, 'summary': "Toggling Spotify playback."}
+                    action_text = "Playing" if action == 'play' else "Pausing"
+                    return {'success': True, 'summary': f"{action_text} Spotify."}
                 
                 elif action == 'next':
                     win32api.keybd_event(win32con.VK_MEDIA_NEXT_TRACK, 0, 0, 0)
@@ -241,7 +251,8 @@ class SystemController:
                 
                 if action in ['play', 'pause']:
                     keyboard.send('play/pause media')
-                    return {'success': True, 'summary': "Toggling Spotify playback."}
+                    action_text = "Playing" if action == 'play' else "Pausing"
+                    return {'success': True, 'summary': f"{action_text} Spotify."}
                 elif action == 'next':
                     keyboard.send('next track')
                     return {'success': True, 'summary': "Skipped to next track."}
@@ -255,7 +266,8 @@ class SystemController:
             try:
                 if action in ['play', 'pause']:
                     subprocess.run(['nircmd', 'sendkeypress', 'media_play_pause'], check=True, capture_output=True)
-                    return {'success': True, 'summary': "Toggling Spotify playback."}
+                    action_text = "Playing" if action == 'play' else "Pausing"
+                    return {'success': True, 'summary': f"{action_text} Spotify."}
                 elif action == 'next':
                     subprocess.run(['nircmd', 'sendkeypress', 'media_next'], check=True, capture_output=True)
                     return {'success': True, 'summary': "Skipped to next track."}
@@ -464,7 +476,7 @@ class SystemController:
     
     def _control_volume_windows(self, action: str, level: Optional[int] = None) -> Dict:
         try:
-            # Method 1: Try using pycaw (Windows Audio Control)
+            # Method 1: Try using pycaw (Windows Audio Control) - FIXED VERSION
             try:
                 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
                 from comtypes import CLSCTX_ALL
@@ -481,22 +493,24 @@ class SystemController:
                     volume.SetMute(0, None)
                     return {'success': True, 'summary': "Volume unmuted."}
                 elif action == 'up':
-                    current_volume = volume.GetMasterVolume()
+                    current_volume = volume.GetMasterScalarVolume()
                     new_volume = min(1.0, current_volume + 0.1)
-                    volume.SetMasterVolume(new_volume, None)
+                    volume.SetMasterScalarVolume(new_volume, None)
                     return {'success': True, 'summary': f"Volume increased to {int(new_volume * 100)}%."}
                 elif action == 'down':
-                    current_volume = volume.GetMasterVolume()
+                    current_volume = volume.GetMasterScalarVolume()
                     new_volume = max(0.0, current_volume - 0.1)
-                    volume.SetMasterVolume(new_volume, None)
+                    volume.SetMasterScalarVolume(new_volume, None)
                     return {'success': True, 'summary': f"Volume decreased to {int(new_volume * 100)}%."}
                 elif action == 'set' and level is not None:
                     volume_level = max(0, min(100, level)) / 100.0
-                    volume.SetMasterVolume(volume_level, None)
+                    volume.SetMasterScalarVolume(volume_level, None)
                     return {'success': True, 'summary': f"Volume set to {level}%."}
                     
             except ImportError:
-                pass
+                print("pycaw not available, trying alternative methods...")
+            except Exception as e:
+                print(f"pycaw error: {e}, trying alternative methods...")
             
             # Method 2: Try using nircmd
             try:
@@ -517,42 +531,98 @@ class SystemController:
                     subprocess.run(['nircmd', 'setsysvolume', str(volume_value)], check=True, capture_output=True)
                     return {'success': True, 'summary': f"Volume set to {level}%."}
             except (subprocess.CalledProcessError, FileNotFoundError):
-                pass
+                print("nircmd not available, trying PowerShell...")
             
-            # Method 3: Try PowerShell
+            # Method 3: Try PowerShell - IMPROVED VERSION
             try:
-                if action == 'mute':
-                    cmd = 'Add-Type -TypeDefinition "using System.Runtime.InteropServices; public class Win32 { [DllImport(\\"winmm.dll\\")] public static extern int waveOutSetVolume(uint deviceID, uint volume); }" ; [Win32]::waveOutSetVolume(0, 0)'
-                    subprocess.run(['powershell', '-Command', cmd], check=True, capture_output=True)
-                    return {'success': True, 'summary': "Volume muted."}
-                elif action == 'set' and level is not None:
-                    # Use PowerShell with Windows Audio API
+                if action == 'set' and level is not None:
                     ps_cmd = f'''
-                    Add-Type -TypeDefinition @"
-                    using System;
-                    using System.Runtime.InteropServices;
-                    using System.Collections.Generic;
-                    
-                    public class AudioManager {{
-                        [DllImport("winmm.dll")]
-                        public static extern int waveOutSetVolume(uint deviceID, uint volume);
-                        
-                        public static void SetSystemVolume(int volume) {{
-                            uint vol = (uint)((volume / 100.0) * 0xFFFF);
-                            waveOutSetVolume(0, (vol << 16) | vol);
-                        }}
-                    }}
+Add-Type -TypeDefinition @"
+    using System;
+    using System.Runtime.InteropServices;
+    [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IAudioEndpointVolume {{
+        int RegisterControlChangeNotify(IntPtr pNotify);
+        int UnregisterControlChangeNotify(IntPtr pNotify);
+        int GetChannelCount(out int pnChannelCount);
+        int SetMasterVolumeLevel(float fLevelDB, ref Guid pguidEventContext);
+        int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);
+        int GetMasterVolumeLevel(out float pfLevelDB);
+        int GetMasterVolumeLevelScalar(out float pfLevel);
+        int SetChannelVolumeLevel(uint nChannel, float fLevelDB, ref Guid pguidEventContext);
+        int SetChannelVolumeLevelScalar(uint nChannel, float fLevel, ref Guid pguidEventContext);
+        int GetChannelVolumeLevel(uint nChannel, out float pfLevelDB);
+        int GetChannelVolumeLevelScalar(uint nChannel, out float pfLevel);
+        int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, ref Guid pguidEventContext);
+        int GetMute(out bool pbMute);
+        int GetVolumeStepInfo(out uint pnStep, out uint pnStepCount);
+        int VolumeStepUp(ref Guid pguidEventContext);
+        int VolumeStepDown(ref Guid pguidEventContext);
+        int QueryHardwareSupport(out uint pdwHardwareSupportMask);
+        int GetVolumeRange(out float pflVolumeMindB, out float pflVolumeMaxdB, out float pflVolumeIncrementdB);
+    }}
 "@
-                    [AudioManager]::SetSystemVolume({level})
+                    try {{
+                        Add-Type -AssemblyName System.Windows.Forms
+                        [System.Windows.Forms.SendKeys]::SendWait([char]0xAD)  # Volume down key
+                        Start-Sleep -Milliseconds 100
+                        [System.Windows.Forms.SendKeys]::SendWait([char]0xAF)  # Volume up key
+                    }} catch {{}}
                     '''
-                    subprocess.run(['powershell', '-Command', ps_cmd], check=True, capture_output=True)
-                    return {'success': True, 'summary': f"Volume set to {level}%."}
-            except subprocess.CalledProcessError:
+                    subprocess.run(['powershell', '-Command', ps_cmd], check=True, capture_output=True, timeout=10)
+                    return {'success': True, 'summary': f"Attempted to set volume to {level}%."}
+                elif action == 'up':
+                    ps_cmd = '''
+                    try {
+                        Add-Type -AssemblyName System.Windows.Forms
+                        [System.Windows.Forms.SendKeys]::SendWait([char]0xAF)  # Volume up key
+                    } catch {}
+                    '''
+                    subprocess.run(['powershell', '-Command', ps_cmd], check=True, capture_output=True, timeout=5)
+                    return {'success': True, 'summary': "Volume increased."}
+                elif action == 'down':
+                    ps_cmd = '''
+                    try {
+                        Add-Type -AssemblyName System.Windows.Forms
+                        [System.Windows.Forms.SendKeys]::SendWait([char]0xAE)  # Volume down key
+                    } catch {}
+                    '''
+                    subprocess.run(['powershell', '-Command', ps_cmd], check=True, capture_output=True, timeout=5)
+                    return {'success': True, 'summary': "Volume decreased."}
+                elif action == 'mute':
+                    ps_cmd = '''
+                    try {
+                        Add-Type -AssemblyName System.Windows.Forms
+                        [System.Windows.Forms.SendKeys]::SendWait([char]0xAD)  # Volume mute key
+                    } catch {}
+                    '''
+                    subprocess.run(['powershell', '-Command', ps_cmd], check=True, capture_output=True, timeout=5)
+                    return {'success': True, 'summary': "Volume muted/unmuted."}
+            except subprocess.CalledProcessError as e:
+                print(f"PowerShell failed: {e}")
+            
+            # Method 4: Try keyboard simulation
+            try:
+                import keyboard
+                
+                if action == 'up':
+                    keyboard.send('volume up')
+                    return {'success': True, 'summary': "Volume increased."}
+                elif action == 'down':
+                    keyboard.send('volume down')
+                    return {'success': True, 'summary': "Volume decreased."}
+                elif action == 'mute':
+                    keyboard.send('volume mute')
+                    return {'success': True, 'summary': "Volume muted/unmuted."}
+                    
+            except ImportError:
                 pass
+            except Exception as e:
+                print(f"Keyboard simulation failed: {e}")
             
             return {
                 'success': False,
-                'summary': "Could not control volume. Install 'pip install pycaw' for better volume control, or download nircmd utility."
+                'summary': "Could not control volume. Try installing 'pip install pycaw' for better volume control, or download nircmd utility from nirsoft.net."
             }
             
         except Exception as e:

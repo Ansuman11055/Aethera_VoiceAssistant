@@ -92,20 +92,28 @@ class NLPProcessor:
             ],
             
             'spotify_control': [
+                # Clear play/pause commands
+                r'play spotify',
+                r'pause spotify',
+                r'stop spotify',
+                r'resume spotify',
+                r'start spotify',
+                
+                # Media control
+                r'next song',
+                r'skip song',
+                r'previous song',
+                r'spotify next',
+                r'spotify skip',
+                r'spotify previous',
+                
+                # Search and play
                 r'(?:play|search) (.+) (?:on spotify|spotify)',
                 r'spotify (?:play|search) (.+)',
                 r'play (.+) on spotify',
                 r'spotify (.+)',
-                r'pause spotify',
-                r'stop spotify',
-                r'next song',
-                r'skip song',
-                r'previous song',
-                r'spotify pause',
-                r'spotify stop',
-                r'spotify next',
-                r'spotify skip',
-                r'spotify previous',
+                
+                # General music command
                 r'play music'
             ],
             
@@ -183,21 +191,30 @@ class NLPProcessor:
                     elif intent == 'spotify_control':
                         text_lower = text.lower()
                         
-                        if any(word in text_lower for word in ['pause', 'stop']) and 'spotify' in text_lower:
+                        # Clear play/pause commands
+                        if text_lower in ['play spotify', 'start spotify', 'resume spotify']:
+                            entities['action'] = 'play'
+                        elif text_lower in ['pause spotify', 'stop spotify']:
                             entities['action'] = 'pause'
-                        elif any(word in text_lower for word in ['next', 'skip']) and 'song' in text_lower:
+                        elif text_lower == 'play music':
+                            entities['action'] = 'play'
+                        
+                        # Media controls
+                        elif any(word in text_lower for word in ['next song', 'skip song', 'spotify next', 'spotify skip']):
                             entities['action'] = 'next'
-                        elif 'previous song' in text_lower:
+                        elif any(word in text_lower for word in ['previous song', 'spotify previous']):
                             entities['action'] = 'previous'
-                        elif any(word in text_lower for word in ['play', 'search']) and 'spotify' in text_lower:
+                        
+                        # Search and play commands
+                        elif any(phrase in text_lower for phrase in ['play', 'search']) and 'spotify' in text_lower:
                             entities['action'] = 'search_and_play'
                             if match.groups() and match.group(1):
                                 entities['query'] = match.group(1).strip()
-                        elif 'spotify' in text_lower:
-                            entities['action'] = 'play'
-                            if match.groups() and match.group(1):
-                                entities['query'] = match.group(1).strip()
+                        elif 'spotify' in text_lower and match.groups() and match.group(1):
+                            entities['action'] = 'search_and_play'
+                            entities['query'] = match.group(1).strip()
                         else:
+                            # Default to play action for any unmatched spotify command
                             entities['action'] = 'play'
                     
                     return intent, entities
@@ -235,11 +252,14 @@ class NLPProcessor:
             '• "Summary of [topic]" - Get topic summary',
             "",
             "🎵 SPOTIFY MUSIC CONTROL:",
+            '• "Play Spotify" - Start Spotify playback',
+            '• "Pause Spotify" - Pause Spotify playback',
+            '• "Stop Spotify" - Stop Spotify playback',
+            '• "Resume Spotify" - Resume Spotify playback',
             '• "Play [song/artist] on Spotify" - Search and play',
-            '• "Pause Spotify" - Pause playback',
             '• "Next song" - Skip to next track',
             '• "Previous song" - Go to previous track',
-            '• "Play music" - Start Spotify',
+            '• "Play music" - Start music playback',
             "",
             "💻 SYSTEM CONTROL:",
             '• "Open [app name]" - Launch applications',
@@ -274,6 +294,8 @@ class NLPProcessor:
             '• "Search for Python programming tutorials"',
             '• "Open Chrome"',
             '• "Set volume to 75"',
+            '• "Play Spotify"',
+            '• "Pause Spotify"',
             '• "Play some jazz music on Spotify"',
             '• "What time is it?"',
             '• "Take a screenshot"',
