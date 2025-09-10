@@ -9,7 +9,8 @@ python-dotenv
 lxml
 pyaudio
 pycaw
+comtypes
 pywin32
 keyboard
 setuptools
-wheel
+wheels
